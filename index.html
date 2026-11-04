@@ -17,9 +17,9 @@
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
 <style>
-:root{--bg:#f4f5fb;--card:#fff;--tx:#1e1b4b;--mut:#6b7280;--bd:#e5e7eb;--inp:#f3f4f6;--red:#e11d48;--amb:#d97706;--grn:#16a34a;--blue:#2563eb;
+:root{--bg:#f4f5fb;--card:#fff;--tx:#1e1b4b;--mut:#6b7280;--bd:#e5e7eb;--inp:#f3f4f6;--red:#be123c;--amb:#b45309;--grn:#15803d;--blue:#1d4ed8;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1020;--card:#1a1b33;--tx:#eef0ff;--mut:#9aa0c3;--bd:#2c2e52;--inp:#242647;--red:#fb7185;--amb:#ca8a04;--grn:#4ade80;--blue:#60a5fa;color-scheme:dark}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1020;--card:#1a1b33;--tx:#eef0ff;--mut:#9aa0c3;--bd:#2c2e52;--inp:#242647;--red:#fb7185;--amb:#facc15;--grn:#4ade80;--blue:#60a5fa;color-scheme:dark}}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:auto;margin:0}
 body{background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -177,8 +177,6 @@ function GoalModal({onSet,onClose,init,cur,base,reached}){
 
  return html`<${Modal} onClose=${onClose}>
   <h2 className="font-bold text-center whitespace-nowrap" style=${{fontSize:'clamp(15px,5.2vw,22px)'}}>Combien d’étapes aujourd’hui ?</h2>
-  
-  ${hasChosenBefore?html`<p className="text-center text-xs mt-1 font-semibold" style=${{color:'var(--mut)'}}>Premier objectif de la journée : <span className="font-bold" style=${{color:'#6366f1'}}>${baseGoal} étape${baseGoal>1?'s':''}</span></p>`:null}
 
   ${isDecreased?html`<p className="text-sm mt-3 p-3 rounded-xl font-semibold text-center" style=${{background:'var(--inp)',color:'var(--red)'}}>Attention, si tu choisis un objectif inférieur à celui de départ (${baseGoal}), ton streak ne pourra pas augmenter aujourd’hui.</p>`:html`<p className="text-center text-sm mt-1" style=${{color:'var(--mut)'}}>${hasChosenBefore?'Modifie ton objectif.':'Fixe-toi un objectif.'}</p>`}
 
@@ -284,7 +282,7 @@ function App(){
 
  const setGoal=n=>{sfx.ok();setShowGoal(false);const hit=dd.done>=n,base=dd.goal>0?(dd.base||dd.goal):n,ch=dd.goal>0&&n<base;
   setS({...S,daily:{date:td,goal:n,done:dd.done,reached:hit,base},streak:hit&&!dd.reached?nextStreak(S.streak,ch):S.streak});
-  if(hit&&!dd.reached){sfx.goal();setFx(f+1)}};
+  if(hit&&!dd.reached){sfx.goal();setFx(f=>f+1)}};
 
  const save=t0=>{const old=S.tasks.find(x=>x.id===t0.id),ex=!!old,all=t0.steps.every(s=>s.done),t={...t0,doneOn:all?(old&&old.doneOn):undefined};
   setS({...S,tasks:ex?S.tasks.map(x=>x.id===t.id?t:x):[...S.tasks,t]});sfx.ok();
