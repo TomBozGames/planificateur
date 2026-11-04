@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6366f1">
+<title>Planificateur</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planificateur">
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<style>
+:root{--bg:#f4f5fb;--card:#fff;--tx:#1e1b4b;--mut:#6b7280;--bd:#e5e7eb;--inp:#f3f4f6;--red:#e11d48;--amb:#ca8a04;--grn:#16a34a;--blue:#2563eb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1020;--card:#1a1b33;--tx:#eef0ff;--mut:#9aa0c3;--bd:#2c2e52;--inp:#242647;--red:#fb7185;--amb:#facc15;--grn:#4ade80;--blue:#60a5fa;color-scheme:dark}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:auto;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:1.25rem}
+.inp{background:var(--inp);border:2px solid transparent;border-radius:.9rem;padding:.7rem .9rem;width:100%;color:var(--tx);outline:none;transition:.2s;font-size:16px}
+.inp:focus{border-color:#6366f1}
+.btn{transition:transform .15s cubic-bezier(.3,1.6,.5,1),box-shadow .2s,filter .2s;cursor:pointer}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.07)}
+.btn:active{transform:scale(.92)}
+.tcard{transition:transform .2s,box-shadow .2s;animation:rise .35s both}
+.tcard:hover{transform:translateY(-3px);box-shadow:0 10px 24px -10px rgba(99,102,241,.45)}
+.tcard:active{transform:scale(.98)}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes sheet{from{opacity:0;transform:translateY(40px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes boing{0%{transform:scale(1)}40%{transform:scale(1.25)}100%{transform:scale(1)}}
+@keyframes fly{0%{opacity:1;transform:translate(0,0) scale(.4)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.3) rotate(var(--r))}}
+@keyframes vanish{to{opacity:0;transform:scale(.9)}}
+.sheet{animation:sheet .3s cubic-bezier(.3,1.4,.5,1) both}
+.fade{animation:fade .2s both}
+.boing{animation:boing .4s}
+.fly{position:absolute;left:50%;top:50%;pointer-events:none;animation:fly .9s ease-out forwards;font-size:22px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {useState,useEffect,useRef}=React;
+const html=htm.bind(React.createElement);
+const KEY='planificateur:v1';
+const pad=n=>String(n).padStart(2,'0');
+const ds=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>ds(new Date());
+const yest=()=>{const d=new Date();d.setDate(d.getDate()-1);return ds(d)};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const fmt=d=>new Date(d+'T00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+
+/* ---------- Sons (Web Audio) ---------- */
+let AC;
+const tone=(f,d=.12,type='sine',at=0,v=.15)=>{try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();
+const o=AC.createOscillator(),g=AC.createGain(),t=AC.currentTime+at;o.type=type;o.frequency.setValueAtTime(f,t);
+g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d)}catch(e){}};
+const seq=(a,d,type)=>a.forEach((f,i)=>tone(f,d,type||'triangle',i*.09));
+const sfx={click:()=>tone(520,.06,'triangle',0,.1),open:()=>{tone(400,.08);tone(620,.1,'sine',.07)},
+close:()=>{tone(620,.07);tone(400,.09,'sine',.06)},ok:()=>{tone(660,.1,'triangle');tone(990,.14,'triangle',.08)},
+undo:()=>tone(330,.1,'triangle'),done:()=>seq([523,659,784,1047],.2),goal:()=>seq([523,659,784,1047,1319,1568,2093],.25),
+pop:()=>tone(200+Math.random()*300,.15,'sawtooth',0,.05),del:()=>{tone(300,.1,'square',0,.07);tone(180,.15,'square',.08,.07)},
+err:()=>{tone(200,.15,'square',0,.07);tone(160,.2,'square',.1,.07)}};
+
+/* ---------- Feu d'artifice ---------- */
+function fireworks(cv){
+ const c=cv.getContext('2d');cv.width=innerWidth;cv.height=innerHeight;
+ const cols=['#f43f5e','#f59e0b','#10b981','#3b82f6','#a855f7','#facc15'];let P=[],t=0;
+ const burst=(x,y)=>{for(let i=0;i<48;i++){const a=Math.random()*6.28,s=2+Math.random()*5;P.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:70+Math.random()*30,c:cols[i%6],r:2+Math.random()*2})}};
+ for(let i=0;i<5;i++)setTimeout(()=>{burst(innerWidth*(.15+Math.random()*.7),innerHeight*(.15+Math.random()*.35));sfx.pop()},i*450);
+ for(let i=0;i<130;i++)P.push({x:Math.random()*innerWidth,y:-20-Math.random()*300,vx:Math.random()*2-1,vy:2+Math.random()*3,l:220,c:cols[i%6],r:4,sq:1});
+ (function f(){c.clearRect(0,0,cv.width,cv.height);P=P.filter(p=>p.l>0);
+  P.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(!p.sq)p.vy+=.06;p.l--;c.globalAlpha=Math.min(1,p.l/30);c.fillStyle=p.c;
+   if(p.sq)c.fillRect(p.x,p.y,p.r*2,p.r);else{c.beginPath();c.arc(p.x,p.y,p.r,0,7);c.fill()}});
+  t++;if(t<250||P.length)requestAnimationFrame(f);else c.clearRect(0,0,cv.width,cv.height)})();
+}
+
+/* ---------- Icônes (tracés Lucide) ---------- */
+const I={plus:'<path d="M5 12h14M12 5v14"/>',minus:'<path d="M5 12h14"/>',
+pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+trash:'<path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/>',
+check:'<path d="M20 6 9 17l-5-5"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
+cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+dl:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+clip:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"/>',
+clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',
+cog:'<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>'};
+const Ic=({n,s=20,cls=''})=>html`<svg width=${s} height=${s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className=${cls} dangerouslySetInnerHTML=${{__html:I[n]}}/>`;
+
+/* ---------- Données ---------- */
+const EMPTY=()=>({tasks:[],daily:{date:'',goal:0,done:0,reached:false},streak:{count:0,last:''}});
+const load=()=>{try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.tasks)return{...EMPTY(),...s}}catch(e){}return EMPTY()};
+
+function useVV(){
+ const g=()=>{const v=window.visualViewport;return{h:v?v.height:innerHeight,t:v?v.offsetTop:0}};
+ const [s,setS]=useState(g);
+ useEffect(()=>{const v=window.visualViewport,f=()=>setS(g());
+  if(v){v.addEventListener('resize',f);v.addEventListener('scroll',f)}addEventListener('resize',f);
+  return()=>{if(v){v.removeEventListener('resize',f);v.removeEventListener('scroll',f)}removeEventListener('resize',f)}},[]);
+ return s;
+}
+function Modal({children,onClose,block,full}){
+ const vv=useVV(),big=innerWidth>=640;
+ return html`<div className="fade fixed left-0 right-0 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4" style=${{top:vv.t+'px',height:vv.h+'px',background:'rgba(10,10,30,.55)',backdropFilter:'blur(4px)'}} onClick=${e=>{if(!block&&e.target===e.currentTarget)onClose()}}>
+ <div className="sheet card w-full sm:max-w-md overflow-y-auto p-5" style=${{maxHeight:'100%',height:full&&!big?'100%':'auto',paddingTop:full&&!big?'calc(env(safe-area-inset-top,0px) + 1.25rem)':undefined,borderRadius:big?'1.5rem':(full?'0':'1.5rem 1.5rem 0 0')}}>${children}</div></div>`;
+}
+
+function SettingsModal({S,onImport,onClose}){
+ const [err,setErr]=useState('');
+ const fileRef=useRef();
+
+ const exportData=()=>{
+  sfx.ok();
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='planificateur-backup-'+today()+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+ };
+
+ const handleFile=e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=evt=>{
+   try{
+    const parsed=JSON.parse(evt.target.result);
+    if(parsed&&Array.isArray(parsed.tasks)){
+     onImport(parsed);
+     sfx.ok();
+     onClose();
+    }else{
+     setErr('Fichier invalide.');
+     sfx.err();
+    }
+   }catch(ex){
+    setErr('Erreur de lecture.');
+    sfx.err();
+   }
+  };
+  r.readAsText(file);
+ };
+
+ return html`<${Modal} onClose=${onClose}>
+  <div className="flex items-center justify-between mb-4">
+   <h2 className="text-xl font-bold">Paramètres</h2>
+   <button className="btn p-2 rounded-full" style=${{background:'var(--inp)'}} onClick=${()=>{sfx.close();onClose()}}><${Ic} n="x"/></button>
+  </div>
+  <p className="text-sm mb-4" style=${{color:'var(--mut)'}}>Sauvegarde tes tâches pour ne jamais les perdre ou transfère-les vers un autre appareil.</p>
+  <div className="space-y-3">
+   <button className="btn w-full py-3 px-4 rounded-xl text-white font-bold flex items-center justify-center gap-2" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${exportData}>
+    <${Ic} n="dl" s=${18}/> Exporter mes données
+   </button>
+   <button className="btn w-full py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2" style=${{background:'var(--inp)'}} onClick=${()=>fileRef.current&&fileRef.current.click()}>
+    <${Ic} n="up" s=${18}/> Importer une sauvegarde
+   </button>
+   <input type="file" ref=${fileRef} accept=".json" className="hidden" onChange=${handleFile}/>
+  </div>
+  ${err&&html`<p className="text-sm mt-3 font-semibold text-center" style=${{color:'var(--red)'}}>${err}</p>`}
+ <//>`;
+}
+
+function GoalModal({onSet,onClose,init,cur,base,reached}){
+ const [n,setN]=useState(init||3);
+ return html`<${Modal} onClose=${onClose}>
+  <h2 className="font-bold text-center whitespace-nowrap" style=${{fontSize:'clamp(15px,5.2vw,22px)'}}>Combien d’étapes aujourd’hui ?</h2>
+  ${cur>0&&!reached&&n<base?html`<p className="text-sm mt-2 p-3 rounded-xl font-semibold" style=${{background:'var(--inp)',color:'var(--red)'}}>${n<cur?'Attention, si tu baisses ton objectif, ta série ne pourra pas augmenter aujourd’hui.':'Ta série ne pourra pas augmenter aujourd’hui.'}</p>`:html`<p className="text-center text-sm mt-1" style=${{color:'var(--mut)'}}>${cur>0?'Modifie ton objectif.':'Fixe-toi un objectif.'}</p>`}
+  <div className="flex items-center justify-center gap-6 my-6">
+   <button className="btn w-14 h-14 rounded-full flex items-center justify-center text-white disabled:opacity-40" style=${{background:'#6366f1'}} disabled=${n<=1} onClick=${()=>setN(n-1)}><${Ic} n="minus" s=${26}/></button>
+   <div key=${n} className="boing text-6xl font-extrabold w-20 text-center">${n}</div>
+   <button className="btn w-14 h-14 rounded-full flex items-center justify-center text-white" style=${{background:'#6366f1'}} onClick=${()=>setN(n+1)}><${Ic} n="plus" s=${26}/></button>
+  </div>
+  <button className="btn w-full py-3.5 rounded-2xl text-white font-bold text-lg" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>onSet(n)}>C’est parti !</button>
+  <button className="btn w-full mt-2 py-2 text-sm" style=${{color:'var(--mut)'}} onClick=${onClose}>Plus tard</button>
+ <//>`;
+}
+
+function TaskForm({task,onSave,onClose}){
+ const [name,setName]=useState(task?task.name:'');
+ const [due,setDue]=useState(task?task.due:today());
+ const [steps,setSteps]=useState(task?task.steps.map(s=>({...s})):[{id:uid(),text:'',done:false}]);
+ const [err,setErr]=useState(false);
+ const upd=(id,text)=>setSteps(steps.map(s=>s.id===id?{...s,text}:s));
+ const mv=(i,d)=>{const j=i+d;if(j<0||j>=steps.length)return;const a=[...steps];[a[i],a[j]]=[a[j],a[i]];setSteps(a)};
+ const save=()=>{const st=steps.filter(s=>s.text.trim()).map(s=>({...s,text:s.text.trim()}));
+  if(!name.trim()||!due||!st.length){setErr(true);sfx.err();return}
+  onSave({id:task?task.id:uid(),name:name.trim(),due,steps:st})};
+
+ return html`<${Modal} full=${true} onClose=${onClose}>
+  <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold">${task?'Modifier la tâche':'Nouvelle tâche'}</h2>
+   <button className="btn p-2 rounded-full" style=${{background:'var(--inp)'}} onClick=${()=>{sfx.close();onClose()}}><${Ic} n="x"/></button></div>
+  <label className="block text-sm font-semibold mb-1">Nom de la tâche</label>
+  <input className="inp mb-4" value=${name} placeholder="Ex: Lecture du roman de français" onInput=${e=>setName(e.target.value)}/>
+  <label className="block text-sm font-semibold mb-1">Date limite</label>
+  <input type="date" className="inp mb-4" value=${due} onInput=${e=>setDue(e.target.value)}/>
+  <label className="block text-sm font-semibold mb-1">Étapes</label>
+  <div className="space-y-2 mb-3">${steps.map((s,i)=>html`<div key=${s.id} className="flex gap-2 items-center">
+   <input className="inp" value=${s.text} placeholder=${'Ex: Chapitre '+(i+1)} onInput=${e=>upd(s.id,e.target.value)}/>
+   ${steps.length>1&&html`<div className="flex flex-col shrink-0"><button aria-label="Monter" disabled=${i===0} className="btn p-0.5 disabled:opacity-25" style=${{color:'var(--mut)'}} onClick=${()=>mv(i,-1)}><${Ic} n="up" s=${18}/></button><button aria-label="Descendre" disabled=${i===steps.length-1} className="btn p-0.5 disabled:opacity-25" style=${{color:'var(--mut)'}} onClick=${()=>mv(i,1)}><${Ic} n="down" s=${18}/></button></div>`}
+   ${steps.length>1&&html`<button className="btn p-2 rounded-full shrink-0" style=${{color:'var(--mut)'}} onClick=${()=>setSteps(steps.filter(x=>x.id!==s.id))}><${Ic} n="x" s=${18}/></button>`}</div>`)}</div>
+  <button className="btn flex items-center gap-1 text-sm font-semibold mb-5" style=${{color:'#6366f1'}} onClick=${()=>{setSteps([...steps,{id:uid(),text:'',done:false}]);sfx.click()}}><${Ic} n="plus" s=${16}/>Ajouter une étape</button>
+  ${err&&html`<p className="text-sm mb-3 font-semibold" style=${{color:'var(--red)'}}>Complète le nom, la date et au moins une étape.</p>`}
+  <button className="btn w-full py-3.5 rounded-2xl text-white font-bold" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${save}>Enregistrer</button>
+ <//>`;
+}
+
+function Due({d,done}){
+ const late=!done&&d<=today();
+ return html`<span className="inline-flex items-center gap-1 text-sm font-semibold" style=${{color:late?'var(--red)':'var(--mut)'}}><${Ic} n="cal" s=${15}/>${fmt(d)}</span>`;
+}
+
+function Bar({v,t}){return html`<div className="h-2.5 rounded-full overflow-hidden" style=${{background:'var(--inp)'}}><div className="h-full rounded-full" style=${{width:(t?v/t*100:0)+'%',background:'linear-gradient(90deg,#6366f1,#a855f7)',transition:'width .5s cubic-bezier(.3,1.4,.5,1)'}}/></div>`}
+
+function Detail({task,cele,onToggle,onEdit,onDelete,onClose}){
+ const [ask,setAsk]=useState(false);
+ const dn=task.steps.filter(s=>s.done).length;
+ return html`<${Modal} onClose=${onClose}>
+  <div className="relative">
+  ${cele&&html`<div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+    <div className="boing text-center font-extrabold text-2xl rounded-2xl px-4 py-2" style=${{background:'var(--card)'}}>🎉 Tâche terminée !</div>
+    ${Array.from({length:16},(_,i)=>{const a=i/16*6.28,r=90+(i%3)*30;return html`<span key=${i} className="fly" style=${{'--dx':Math.cos(a)*r+'px','--dy':Math.sin(a)*r+'px','--r':(i*40)+'deg'}}>${['✨','🎉','⭐','🎊'][i%4]}</span>`})}</div>`}
+  <div style=${{animation:cele?'vanish .5s .6s forwards':'none'}}>
+  <div className="flex items-start justify-between gap-2 mb-1">
+   <h2 className="text-xl font-bold break-words min-w-0">${task.name}</h2>
+   <div className="flex gap-1 shrink-0">
+    <button aria-label="Modifier" className="btn p-2 rounded-full" style=${{background:'var(--inp)'}} onClick=${onEdit}><${Ic} n="pencil" s=${18}/></button>
+    <button aria-label="Supprimer" className="btn p-2 rounded-full" style=${{background:'var(--inp)',color:'var(--red)'}} onClick=${()=>setAsk(true)}><${Ic} n="trash" s=${18}/></button>
+    <button aria-label="Fermer" className="btn p-2 rounded-full" style=${{background:'var(--inp)'}} onClick=${()=>{sfx.close();onClose()}}><${Ic} n="x" s=${18}/></button></div></div>
+  <${Due} d=${task.due} done=${!!task.doneOn}/>
+  ${ask&&html`<div className="fade mt-3 p-3 rounded-xl flex items-center justify-between gap-2" style=${{background:'var(--inp)'}}><span className="text-sm font-semibold">Supprimer cette tâche ?</span>
+   <div className="flex gap-2"><button className="btn px-3 py-1.5 rounded-lg text-sm" onClick=${()=>setAsk(false)}>Non</button>
+   <button className="btn px-3 py-1.5 rounded-lg text-sm text-white font-semibold" style=${{background:'#e11d48'}} onClick=${onDelete}>Oui</button></div></div>`}
+  <div className="mt-4 mb-1 flex justify-between text-sm"><span style=${{color:'var(--mut)'}}>${dn} sur ${task.steps.length} étape${task.steps.length>1?'s':''}</span><span className="font-bold">${Math.round(dn/task.steps.length*100)}%</span></div>
+  <${Bar} v=${dn} t=${task.steps.length}/>
+  <div className="mt-4 space-y-2">${task.steps.map(s=>html`<button key=${s.id} disabled=${cele} onClick=${()=>onToggle(s.id)} className="btn w-full flex items-center gap-3 text-left p-3 rounded-xl" style=${{background:'var(--inp)'}}>
+   <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white" style=${{background:s.done?'#10b981':'transparent',border:s.done?'2px solid #10b981':'2px solid var(--mut)',transition:'.25s'}}>${s.done&&html`<${Ic} n="check" s=${14}/>`}</span>
+   <span className="flex-1" style=${{textDecoration:s.done?'line-through':'none',opacity:s.done?.55:1}}>${s.text}</span>
+   </button>`)}</div>
+  </div></div>
+ <//>`;
+}
+
+function App(){
+ const [S,setS]=useState(load);
+ const [td,setTd]=useState(today());
+ const [view,setView]=useState(null);      // {t:'form'} | {t:'edit',id} | {t:'detail',id} | {t:'settings'}
+ const [cele,setCele]=useState(null);
+ const [fx,setFx]=useState(0);
+ const cv=useRef();
+
+ useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}},[S]);
+ useEffect(()=>{const i=setInterval(()=>setTd(today()),30000);return()=>clearInterval(i)},[]);
+ useEffect(()=>{const h=e=>{if(e.target.matches&&e.target.matches('input'))setTimeout(()=>e.target.scrollIntoView({block:'center',behavior:'smooth'}),350)};document.addEventListener('focusin',h);return()=>document.removeEventListener('focusin',h)},[]);
+ useEffect(()=>{const h=e=>{if(e.target.closest&&e.target.closest('button'))sfx.click()};document.addEventListener('click',h);return()=>document.removeEventListener('click',h)},[]);
+ useEffect(()=>{if(fx&&cv.current)fireworks(cv.current)},[fx]);
+ useEffect(()=>{setS(p=>p.tasks.some(t=>t.doneOn&&t.doneOn<td)?{...p,tasks:p.tasks.filter(t=>!(t.doneOn&&t.doneOn<td))}:p)},[td]);
+
+ const [showGoal,setShowGoal]=useState(false);
+ const needGoal=S.daily.date!==td||!S.daily.goal;
+ const dd=S.daily.date===td?S.daily:{date:td,goal:0,done:0,reached:false};const {goal,done}=dd;
+ const pct=goal?Math.round(done/goal*100):0;
+ const sk=S.streak.last===td||S.streak.last===yest()?S.streak.count:0;
+ const nextStreak=(st,changed)=>({count:st.last===td?st.count:st.last===yest()?(changed?st.count:st.count+1):(changed?0:1),last:td});
+
+ const tasks=[...S.tasks].sort((a,b)=>(!!a.doneOn-!!b.doneOn)||a.due.localeCompare(b.due));
+ const cur=view&&view.id?S.tasks.find(t=>t.id===view.id):null;
+
+ const setGoal=n=>{sfx.ok();setShowGoal(false);const hit=dd.done>=n,base=dd.goal>0?(dd.base||dd.goal):n,ch=n<base;
+  setS({...S,daily:{date:td,goal:n,done:dd.done,reached:hit,base},streak:hit&&!dd.reached?nextStreak(S.streak,ch):S.streak});
+  if(hit&&!dd.reached){sfx.goal();setFx(f=>f+1)}};
+
+ const save=t0=>{const old=S.tasks.find(x=>x.id===t0.id),ex=!!old,all=t0.steps.every(s=>s.done),t={...t0,doneOn:all?(old&&old.doneOn):undefined};
+  setS({...S,tasks:ex?S.tasks.map(x=>x.id===t.id?t:x):[...S.tasks,t]});sfx.ok();
+  setView(ex?{t:'detail',id:t.id}:null);
+  if(ex&&all&&!old.doneOn)finish(t.id)};
+ const finish=id=>{setCele(id);sfx.done();setTimeout(()=>{setS(p=>({...p,tasks:p.tasks.map(t=>t.id===id?{...t,doneOn:today()}:t)}));setView(null);setCele(null)},1200)};
+ const toggle=(tid,sid)=>{
+  const t=S.tasks.find(x=>x.id===tid),st=t.steps.find(s=>s.id===sid),nd=!st.done;
+  const steps=t.steps.map(s=>s.id===sid?{...s,done:nd}:s);
+  let daily={...dd,done:Math.max(0,dd.done+(nd?1:-1))},streak=S.streak,goalHit=false;
+  if(nd&&daily.goal>0&&!daily.reached&&daily.done>=daily.goal){daily.reached=true;goalHit=true;
+   streak=nextStreak(S.streak,goal<(dd.base||goal))}
+  const allDone=steps.every(s=>s.done);
+  setS({...S,tasks:S.tasks.map(x=>x.id===tid?{...t,steps,doneOn:allDone?today():undefined}:x),daily,streak});
+  if(!nd)sfx.undo();else if(!goalHit)sfx.ok();
+  if(goalHit){sfx.goal();setFx(f=>f+1)}
+  if(allDone)finish(tid);
+ };
+ const del=id=>{sfx.del();setS({...S,tasks:S.tasks.filter(t=>t.id!==id)});setView(null)};
+ const importData=data=>setS({...EMPTY(),...data});
+
+ // Bordure de couleur selon le nombre d'étapes à faire par jour avant la date limite
+ const getTaskBorderStyle=t=>{
+  if(t.doneOn)return {};
+  if(t.due<=td)return {borderLeft:'5px solid var(--red)'};
+  const remSteps=t.steps.filter(s=>!s.done).length;
+  if(remSteps===0)return {};
+  const days=Math.max(1,Math.round((new Date(t.due+'T00:00')-new Date(td+'T00:00'))/864e5));
+  const ratio=remSteps/days;
+  if(ratio>=3)return {borderLeft:'5px solid var(--red)'};
+  if(ratio>=2)return {borderLeft:'5px solid var(--amb)'};
+  if(ratio>=1)return {borderLeft:'5px solid var(--blue)'};
+  return {};
+ };
+
+ return html`<div className="max-w-xl mx-auto px-4 pt-4" style=${{paddingBottom:'7.5rem'}}>
+  <header className="flex items-center justify-between gap-2 mb-4">
+   <h1 className="text-2xl font-extrabold flex items-center gap-2"><span style=${{color:'#6366f1'}}><${Ic} n="clip" s=${28}/></span>Planificateur</h1>
+   <button aria-label="Paramètres" className="btn p-2 rounded-full" style=${{background:'var(--inp)'}} onClick=${()=>{sfx.open();setView({t:'settings'})}}>
+    <${Ic} n="cog" s=${22}/>
+   </button>
+  </header>
+
+  ${needGoal?html`<button className="btn w-full rounded-2xl px-4 py-3 text-white mb-4 shadow-lg font-semibold flex items-center justify-between" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>{sfx.open();setShowGoal(true)}}><span className="text-left"><span className="block">Définir mon objectif du jour</span><span className="block text-xs font-normal opacity-90">Fixe ton nombre d’étapes</span></span><span className="text-sm opacity-90 shrink-0">${done>0?done+(done>1?' terminées':' terminée'):'🔥 '+sk}</span></button>`:html`<section className="btn rounded-2xl px-4 py-3 text-white mb-4 shadow-lg" onClick=${()=>{sfx.open();setShowGoal(true)}} style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}}>
+   <div className="flex items-center justify-between gap-3">
+    <p className="font-semibold">Progression : ${done} sur ${goal} <span key=${pct} className="boing inline-block font-extrabold">(${pct}%)</span><span className="inline-block ml-1.5 opacity-70 align-middle"><${Ic} n="pencil" s=${14}/></span></p>
+    <div key=${sk} className="boing shrink-0 flex items-center gap-1 rounded-full px-3 py-1 font-bold" style=${{background:'rgba(255,255,255,.2)'}}>🔥 ${sk}</div></div>
+   <div className="h-2 mt-2 rounded-full overflow-hidden" style=${{background:'rgba(255,255,255,.25)'}}><div className="h-full rounded-full bg-white" style=${{width:Math.min(100,pct)+'%',transition:'width .5s cubic-bezier(.3,1.4,.5,1)'}}/></div>
+  </section>`}
+
+  <section className="space-y-3">
+   ${tasks.length===0&&html`<div className="card text-center p-8" style=${{color:'var(--mut)'}}><div className="text-4xl mb-2">🌱</div>Aucune tâche en cours.<br/>Ajoute-en une pour commencer !</div>`}
+   ${tasks.map((t,i)=>{
+    const dn=t.steps.filter(s=>s.done).length;
+    const bStyle=getTaskBorderStyle(t);
+    return html`<button key=${t.id} className="tcard card w-full text-left p-4 block" style=${{...bStyle,animationDelay:i*40+'ms'}} onClick=${()=>{sfx.open();setView({t:'detail',id:t.id})}}>
+     <div className="font-bold text-lg break-words">${t.doneOn?'✅ ':''}${t.name}</div>
+     <div className="mt-1 mb-3"><${Due} d=${t.due} done=${!!t.doneOn}/></div>
+     <${Bar} v=${dn} t=${t.steps.length}/>
+     <div className="text-xs mt-1.5 flex justify-between items-center" style=${{color:'var(--mut)'}}>
+      <span>${dn} / ${t.steps.length} étape${t.steps.length>1?'s':''}</span>
+      ${t.doneOn&&html`<span className="font-semibold" style=${{color:'var(--grn)'}}>Terminée</span>`}
+     </div></button>`})}
+  </section>
+
+  <div className="fixed left-0 right-0 bottom-0 flex justify-center px-4 z-30 pointer-events-none" style=${{paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 1rem)'}}>
+   <button className="btn pointer-events-auto flex items-center justify-center gap-2 w-full max-w-xl py-4 rounded-2xl text-white font-bold text-lg shadow-xl" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>{sfx.open();setView({t:'form'})}}><${Ic} n="plus" s=${22}/>Ajouter une tâche</button>
+  </div>
+
+  ${showGoal&&html`<${GoalModal} init=${goal||3} cur=${goal} base=${dd.base||goal} reached=${!!dd.reached} onSet=${setGoal} onClose=${()=>setShowGoal(false)}/>`}
+  ${view&&view.t==='settings'&&html`<${SettingsModal} S=${S} onImport=${importData} onClose=${()=>setView(null)}/>`}
+  ${view&&view.t==='form'&&html`<${TaskForm} onSave=${save} onClose=${()=>setView(null)}/>`}
+  ${view&&view.t==='edit'&&cur&&html`<${TaskForm} task=${cur} onSave=${save} onClose=${()=>setView({t:'detail',id:cur.id})}/>`}
+  ${view&&view.t==='detail'&&cur&&html`<${Detail} task=${cur} cele=${cele===cur.id} onToggle=${sid=>toggle(cur.id,sid)} onEdit=${()=>{sfx.open();setView({t:'edit',id:cur.id})}} onDelete=${()=>del(cur.id)} onClose=${()=>setView(null)}/>`}
+  <canvas ref=${cv} className="fixed inset-0 pointer-events-none z-50" style=${{width:'100%',height:'100%'}}/>
+ </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>
+<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
+</body>
+</html>
