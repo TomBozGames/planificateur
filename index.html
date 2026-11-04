@@ -171,9 +171,16 @@ function SettingsModal({S,onImport,onClose}){
 
 function GoalModal({onSet,onClose,init,cur,base,reached}){
  const [n,setN]=useState(init||3);
+ const baseGoal=base||init||3;
+ const isDecreased=n<baseGoal;
+
  return html`<${Modal} onClose=${onClose}>
   <h2 className="font-bold text-center whitespace-nowrap" style=${{fontSize:'clamp(15px,5.2vw,22px)'}}>Combien d’étapes aujourd’hui ?</h2>
-  ${cur>0&&!reached&&n<base?html`<p className="text-sm mt-2 p-3 rounded-xl font-semibold" style=${{background:'var(--inp)',color:'var(--red)'}}>${n<cur?'Attention, si tu baisses ton objectif, ta série ne pourra pas augmenter aujourd’hui.':'Ta série ne pourra pas augmenter aujourd’hui.'}</p>`:html`<p className="text-center text-sm mt-1" style=${{color:'var(--mut)'}}>${cur>0?'Modifie ton objectif.':'Fixe-toi un objectif.'}</p>`}
+  
+  ${cur>0?html`<p className="text-center text-xs mt-1 font-semibold" style=${{color:'var(--mut)'}}>Objectif de départ choisi : <span className="font-bold" style=${{color:'#6366f1'}}>${baseGoal} étape${baseGoal>1?'s':''}</span></p>`:null}
+
+  ${isDecreased?html`<p className="text-sm mt-3 p-3 rounded-xl font-semibold text-center" style=${{background:'var(--inp)',color:'var(--red)'}}>Attention, si tu choisis un objectif inférieur à celui de départ (${baseGoal}), ton streak ne pourra pas augmenter aujourd’hui.</p>`:html`<p className="text-center text-sm mt-1" style=${{color:'var(--mut)'}}>${cur>0?'Modifie ton objectif.':'Fixe-toi un objectif.'}</p>`}
+
   <div className="flex items-center justify-center gap-6 my-6">
    <button className="btn w-14 h-14 rounded-full flex items-center justify-center text-white disabled:opacity-40" style=${{background:'#6366f1'}} disabled=${n<=1} onClick=${()=>setN(n-1)}><${Ic} n="minus" s=${26}/></button>
    <div key=${n} className="boing text-6xl font-extrabold w-20 text-center">${n}</div>
