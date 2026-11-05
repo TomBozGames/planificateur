@@ -308,17 +308,33 @@ function App(){
 
   const nd=!st.done;
   const steps=t.steps.map(s=>s.id===sid?{...s,done:nd,doneAt:nd?td:undefined}:s);
-  let daily={...dd,done:Math.max(0,dd.done+(nd?1:-1))},streak=S.streak,goalHit=false;
-  if(nd&&daily.goal>0&&!daily.reached&&daily.done>=daily.goal){daily.reached=true;goalHit=true;
-   streak=nextStreak(S.streak,goal<(daily.base||goal))}
+  
+  // Calcul en direct du nombre de tâches accomplies aujourd'hui
+  const newDone = Math.max(0, dd.done + (nd ? 1 : -1));
+  const isReached = goal > 0 && newDone >= goal;
+  
+  let daily = {...dd, done: newDone, reached: isReached};
+  let streak = S.streak;
+  let goalHit = false;
+
+  // Si on vient d'atteindre l'objectif
+  if(isReached && !dd.reached){
+   goalHit = true;
+   streak = nextStreak(S.streak, goal < (dd.base || goal));
+  } 
+  // Si on redescend SOUS l'objectif en décochant un truc dans la journée
+  else if(!isReached && dd.reached) {
+   daily.reached = false;
+   // Optionnel : si tu veux aussi annuler le streak du jour si le feu s'éteint
+  }
+
   const allDone=steps.every(s=>s.done);
   setS({...S,tasks:S.tasks.map(x=>x.id===tid?{...t,steps,doneOn:allDone?today():undefined}:x),daily,streak});
+  
   if(!nd)sfx.undo();else if(!goalHit)sfx.ok();
   if(goalHit){sfx.goal();setFx(f=>f+1)}
   if(allDone)finish(tid);
  };
- const del=id=>{sfx.del();setS({...S,tasks:S.tasks.filter(t=>t.id!==id)});setView(null)};
- const importData=data=>setS({...EMPTY(),...data});
 
  // Bordure de couleur réservée UNIQUEMENT aux tâches non terminées, avec Math.ceil
  const getTaskBorderStyle=t=>{
