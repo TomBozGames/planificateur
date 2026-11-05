@@ -287,6 +287,7 @@ function App(){
  useEffect(()=>{const h=e=>{if(e.target.closest&&e.target.closest('button'))sfx.click()};document.addEventListener('click',h);return()=>document.removeEventListener('click',h)},[]);
  useEffect(()=>{if(fx&&cv.current)fireworks(cv.current)},[fx]);
  useEffect(()=>{setS(p=>p.tasks.some(t=>t.doneOn&&t.doneOn<td)?{...p,tasks:p.tasks.filter(t=>!(t.doneOn&&t.doneOn<td))}:p)},[td]);
+ useEffect(()=>{const d=S.daily;if(d.date===td&&d.earned&&d.goal>0&&d.done<d.goal&&d.sb)setS(p=>({...p,streak:p.daily.sb,daily:{...p.daily,earned:false,reached:false,sb:undefined}}))},[S.daily,td]);
 
  const [showGoal,setShowGoal]=useState(false);
  const needGoal=S.daily.date!==td||!S.daily.goal;
@@ -294,13 +295,17 @@ function App(){
  const pct=goal?Math.round(done/goal*100):0;
  const sk=S.streak.last===td||S.streak.last===yest()?S.streak.count:0;
  const nextStreak=(st,changed)=>({count:st.last===td?st.count:st.last===yest()?(changed?st.count:st.count+1):(changed?0:1),last:td});
+ const earnedNow=dd.earned!==undefined?dd.earned:!!dd.reached;
 
  const tasks=[...S.tasks].sort((a,b)=>(!!a.doneOn-!!b.doneOn)||a.due.localeCompare(b.due));
  const cur=view&&view.id?S.tasks.find(t=>t.id===view.id):null;
 
  const setGoal=n=>{sfx.ok();setShowGoal(false);const hit=dd.done>=n,base=dd.goal>0?(dd.base||dd.goal):n,ch=dd.goal>0&&n<base;
-  setS({...S,daily:{date:td,goal:n,done:dd.done,reached:hit,base},streak:hit&&!dd.reached?nextStreak(S.streak,ch):S.streak});
-  if(hit&&!dd.reached){sfx.goal();setFx(f=>f+1)}};
+  let daily={...dd,date:td,goal:n,reached:hit,base},streak=S.streak,fire=false;
+  if(hit&&!earnedNow){fire=true;daily.earned=true;daily.sb=S.streak;streak=nextStreak(S.streak,ch)}
+  else if(!hit&&earnedNow&&dd.sb){daily.earned=false;streak=dd.sb;daily.sb=undefined}
+  setS({...S,daily,streak});
+  if(fire){sfx.goal();setFx(f=>f+1)}};
 
  const save=t0=>{const old=S.tasks.find(x=>x.id===t0.id),ex=!!old,all=t0.steps.every(s=>s.done),t={...t0,doneOn:all?(old&&old.doneOn):undefined};
   setS({...S,tasks:ex?S.tasks.map(x=>x.id===t.id?t:x):[...S.tasks,t]});sfx.ok();
@@ -324,19 +329,21 @@ function App(){
   const newDone = Math.max(0, dd.done + (nd ? 1 : -1));
   const isReached = goal > 0 && newDone >= goal;
   
-  let daily = {...dd, done: newDone, reached: isReached};
-  let streak = S.streak;
-  let goalHit = false;
+  let daily={...dd,done:newDone,reached:isReached};
+  let streak=S.streak;
+  let goalHit=false;
 
-  // Si on vient d'atteindre l'objectif
-  if(isReached && !dd.reached){
-   goalHit = true;
-   streak = nextStreak(S.streak, goal < (dd.base || goal));
-  } 
-  // Si on redescend SOUS l'objectif en décochant un truc dans la journée
-  else if(!isReached && dd.reached) {
-   daily.reached = false;
-   // Optionnel : si tu veux aussi annuler le streak du jour si le feu s'éteint
+  if(isReached&&!earnedNow){
+   // Objectif atteint : le feu augmente tout de suite
+   goalHit=true;
+   daily.earned=true;
+   daily.sb=S.streak;
+   streak=nextStreak(S.streak,goal<(dd.base||goal));
+  }else if(!isReached&&earnedNow&&dd.sb){
+   // On redescend sous l'objectif : le feu gagné aujourd'hui est retiré
+   daily.earned=false;
+   streak=dd.sb;
+   daily.sb=undefined;
   }
 
   const allDone=steps.every(s=>s.done);
@@ -346,6 +353,9 @@ function App(){
   if(goalHit){sfx.goal();setFx(f=>f+1)}
   if(allDone)finish(tid);
  };
+
+ const del=id=>{sfx.del();setS({...S,tasks:S.tasks.filter(t=>t.id!==id)});setView(null)};
+ const importData=data=>setS({...EMPTY(),...data});
 
  // Bordure de couleur réservée UNIQUEMENT aux tâches non terminées, avec Math.ceil
  const getTaskBorderStyle=t=>{
