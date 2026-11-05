@@ -322,19 +322,19 @@ function App(){
 
  // Bordure de couleur réservée UNIQUEMENT aux tâches non terminées, avec Math.ceil
  const getTaskBorderStyle=t=>{
-  if(t.doneOn)return {}; // Tâche terminée -> Pas de bordure
+  if(t.doneOn)return {}; // Tâche terminée -> Pas de couleur (neutre)
   if(t.due<=td)return {borderLeft:'5px solid var(--red)'};
   const remSteps=t.steps.filter(s=>!s.done).length;
   if(remSteps===0)return {};
+  
   const days=Math.max(1,Math.round((new Date(t.due+'T00:00')-new Date(td+'T00:00'))/864e5));
   
-  // Formule avec Math.ceil et condition de sécurité pour les étapes étalées
-  const ratio = remSteps < days ? 0 : Math.ceil(remSteps / days);
+  // Math.ceil direct : pour n'importe quelle tâche non terminée, le ratio vaudra au minimum 1 (bleu)
+  const ratio = Math.ceil(remSteps / days);
   
   if(ratio>=3)return {borderLeft:'5px solid var(--red)'};
   if(ratio>=2)return {borderLeft:'5px solid var(--amb)'};
-  if(ratio>=1)return {borderLeft:'5px solid var(--blue)'};
-  return {};
+  return {borderLeft:'5px solid var(--blue)'}; // Bleu par défaut pour toutes les autres tâches en cours
  };
 
  return html`<div className="max-w-xl mx-auto px-4 pt-4" style=${{paddingBottom:'7.5rem'}}>
