@@ -388,7 +388,7 @@ function App(){
    </button>
   </header>
 
-  ${needGoal?html`<button className="btn w-full rounded-2xl px-4 py-3 text-white mb-4 shadow-lg font-semibold flex items-center justify-between" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>{sfx.open();setShowGoal(true)}}><span className="text-left"><span className="block">Définir mon objectif du jour</span><span className="block text-xs font-normal opacity-90">${rec>0?'Objectif recommandé : '+f1(rec):'Fixe ton nombre d’étapes'}</span></span><span className="text-sm opacity-90 shrink-0">${done>0?done+(done>1?' terminées':' terminée'):'🔥 '+sk}</span></button>`:html`<section className="btn rounded-2xl px-4 py-3 text-white mb-4 shadow-lg" onClick=${()=>{sfx.open();setShowGoal(true)}} style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}}>
+  ${needGoal?html`<button className="btn w-full rounded-2xl px-4 py-3 text-white mb-4 shadow-lg font-semibold flex items-center justify-between" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>{sfx.open();setShowGoal(true)}}><span className="text-left"><span className="block">Définir mon objectif du jour</span><span className="block text-xs font-normal opacity-90">${recInt>0?'Objectif recommandé : '+recInt:'Fixe ton nombre d’étapes'}</span></span><span className="text-sm opacity-90 shrink-0">${done>0?done+(done>1?' terminées':' terminée'):'🔥 '+sk}</span></button>`:html`<section className="btn rounded-2xl px-4 py-3 text-white mb-4 shadow-lg" onClick=${()=>{sfx.open();setShowGoal(true)}} style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}}>
    <div className="flex items-center justify-between gap-3">
     <p className="font-semibold">Progression : ${done} sur ${goal} <span key=${pct} className="boing inline-block font-extrabold">(${pct}%)</span><span className="inline-block ml-1.5 opacity-70 align-middle"><${Ic} n="pencil" s=${14}/></span></p>
     <div key=${sk} className="boing shrink-0 flex items-center gap-1 rounded-full px-3 py-1 font-bold" style=${{background:'rgba(255,255,255,.2)'}}>🔥 ${sk}</div></div>
@@ -414,7 +414,7 @@ function App(){
    <button className="btn pointer-events-auto flex items-center justify-center gap-2 w-full max-w-xl py-4 rounded-2xl text-white font-bold text-lg shadow-xl" style=${{background:'linear-gradient(135deg,#6366f1,#a855f7)'}} onClick=${()=>{sfx.open();setView({t:'form'})}}><${Ic} n="plus" s=${22}/>Ajouter une tâche</button>
   </div>
 
-  ${showGoal&&html`<${GoalModal} init=${goal||recInt||3} rec=${rec>0?f1(rec):''} cur=${goal} base=${dd.base||goal} reached=${!!dd.reached} onSet=${setGoal} onClose=${()=>setShowGoal(false)}/>`}
+  ${showGoal&&html`<${GoalModal} init=${goal||recInt||3} rec=${recInt>0?String(recInt):''} cur=${goal} base=${dd.base||goal} reached=${!!dd.reached} onSet=${setGoal} onClose=${()=>setShowGoal(false)}/>`}
   ${view&&view.t==='settings'&&html`<${SettingsModal} S=${S} onImport=${importData} onClose=${()=>setView(null)}/>`}
   ${view&&view.t==='form'&&html`<${TaskForm} onSave=${save} onClose=${()=>setView(null)}/>`}
   ${view&&view.t==='edit'&&cur&&html`<${TaskForm} task=${cur} onSave=${save} onClose=${()=>setView({t:'detail',id:cur.id})}/>`}
