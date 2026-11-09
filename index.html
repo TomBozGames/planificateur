@@ -298,19 +298,35 @@ function App(){
  const nextStreak=(st,changed)=>({count:st.last===td?st.count:st.last===yest()?(changed?st.count:st.count+1):(changed?0:1),last:td});
  const earnedNow=dd.earned!==undefined?dd.earned:!!dd.reached;
 
- // --- OBJECTIF RECOMMANDÉ CORRIGÉ (Max des ratios individuels arrondis au supérieur) ---
+ // --- FORMULE DE CUMUL PAR JALON (Échéance la plus critique / cumul des tâches antérieures) ---
  const rec=(()=>{
-  let maxRatio=0;
-  S.tasks.forEach(t=>{
-   if(t.doneOn||t.due<=td)return;
-   const remSteps=t.steps.filter(s=>!s.done).length;
-   if(remSteps===0)return;
-   const diffTime=new Date(t.due+'T00:00')-new Date(td+'T00:00');
-   const days=Math.max(1,Math.round(diffTime/864e5));
-   const ratio=remSteps/days;
-   if(ratio>maxRatio)maxRatio=ratio;
+  const tasks=S.tasks
+   .filter(t=>!t.doneOn && t.due > td)
+   .map(t=>{
+    const diffTime=new Date(t.due+'T00:00')-new Date(td+'T00:00');
+    const days=Math.max(1,Math.round(diffTime/864e5));
+    const remSteps=t.steps.filter(s=>!s.done).length;
+    return {days,remSteps};
+   })
+   .filter(x=>x.remSteps>0);
+
+  if(tasks.length===0)return 0;
+
+  // Récupérer toutes les échéances uniques triées par ordre croissant
+  const uniqueDays=[...new Set(tasks.map(t=>t.days))].sort((a,b)=>a-b);
+  let maxRate=0;
+
+  // Pour chaque jalon de date, on cumule toutes les étapes dues ce jour-là ou avant
+  uniqueDays.forEach(d=>{
+   const cumulativeSteps=tasks
+    .filter(t=>t.days<=d)
+    .reduce((sum,t)=>sum+t.remSteps,0);
+   
+   const rate=cumulativeSteps/d;
+   if(rate>maxRate)maxRate=rate;
   });
-  return maxRatio>0?Math.ceil(maxRatio):0;
+
+  return maxRate>0?Math.ceil(maxRate):0;
  })();
  const recInt=rec;
 
@@ -370,7 +386,7 @@ function App(){
  const del=id=>{sfx.del();setS({...S,tasks:S.tasks.filter(t=>t.id!==id)});setView(null)};
  const importData=data=>setS({...EMPTY(),...data});
 
- // --- TEST BORDURES CORRIGÉ AVEC MATH.CEIL (Bleu dès 0-1, Jaune de 1 à 2, Rouge à partir de 2-3) ---
+ // --- BORDURES ORIGINALES AVEC SEUILS 1 / 2 / 3 ---
  const getTaskBorderStyle=t=>{
   if(t.doneOn)return {};
   if(t.due<=td)return {borderLeft:'5px solid var(--red)'};
@@ -379,13 +395,11 @@ function App(){
   
   const diffTime=new Date(t.due+'T00:00')-new Date(td+'T00:00');
   const days=Math.max(1,Math.round(diffTime/864e5));
-  
-  // Application du Math.ceil comme tu le voulais pour forcer le seuil supérieur
   const ratio=Math.ceil(remSteps/days);
   
   if(ratio>=3)return {borderLeft:'5px solid var(--red)'};
   if(ratio>=2)return {borderLeft:'5px solid var(--amb)'};
-  return {borderLeft:'5px solid var(--blue)'}; // Bleu minimum pour toute tâche active
+  return {borderLeft:'5px solid var(--blue)'};
  };
 
  return html`<div className="max-w-xl mx-auto px-4 pt-4" style=${{paddingBottom:'7.5rem'}}>
