@@ -360,7 +360,7 @@ function App(){
   }
 
   const allDone=steps.every(s=>s.done);
-  setS({...S,tasks:S.tasks.map(x=>x.id===tid?{...t,steps,doneOn:allDone?today() :undefined}:x),daily,streak});
+  setS({...S,tasks:S.tasks.map(x=>x.id===tid?{...t,steps,doneOn:allDone?today():undefined}:x),daily,streak});
   
   if(!nd)sfx.undo();else if(!goalHit)sfx.ok();
   if(goalHit){sfx.goal();setFx(f=>f+1)}
@@ -370,7 +370,7 @@ function App(){
  const del=id=>{sfx.del();setS({...S,tasks:S.tasks.filter(t=>t.id!==id)});setView(null)};
  const importData=data=>setS({...EMPTY(),...data});
 
- // --- TES BORDURES D'ORIGINE RESTAURÉES ---
+ // --- TEST BORDURES CORRIGÉ AVEC MATH.CEIL (Bleu dès 0-1, Jaune de 1 à 2, Rouge à partir de 2-3) ---
  const getTaskBorderStyle=t=>{
   if(t.doneOn)return {};
   if(t.due<=td)return {borderLeft:'5px solid var(--red)'};
@@ -379,12 +379,13 @@ function App(){
   
   const diffTime=new Date(t.due+'T00:00')-new Date(td+'T00:00');
   const days=Math.max(1,Math.round(diffTime/864e5));
-  const ratio=remSteps/days;
+  
+  // Application du Math.ceil comme tu le voulais pour forcer le seuil supérieur
+  const ratio=Math.ceil(remSteps/days);
   
   if(ratio>=3)return {borderLeft:'5px solid var(--red)'};
   if(ratio>=2)return {borderLeft:'5px solid var(--amb)'};
-  if(ratio>=1)return {borderLeft:'5px solid var(--blue)'};
-  return {};
+  return {borderLeft:'5px solid var(--blue)'}; // Bleu minimum pour toute tâche active
  };
 
  return html`<div className="max-w-xl mx-auto px-4 pt-4" style=${{paddingBottom:'7.5rem'}}>
